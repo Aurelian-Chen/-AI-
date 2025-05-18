@@ -1,0 +1,195 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from typing import List, Dict, Tuple, Optional
+
+class BloggerValuePredictor:
+    def __init__(self):
+        # 平台参数配置：增速系数k, 广告条数系数beta, 粉丝上限fan_limit(万)
+        self.platform_params = {
+            "抖音": {"k": 0.35, "beta": 1.2, "fan_limit": 500},
+            "小红书": {"k": 0.30, "beta": 1.0, "fan_limit": 300},
+            "B站": {"k": 0.25, "beta": 0.8, "fan_limit": 200},
+            "快手": {"k": 0.20, "beta": 0.6, "fan_limit": 400}
+        }
+        
+        # 完整32个标签参数：[增速修正α, 广告条数系数γ, 单价增长系数δ]
+        self.label_params = {
+            "三农": [0.25, 1.2, 0.6],
+            "二次元": [0.30, 1.4, 0.7],
+            "健康": [0.10, 0.8, 0.4],
+            "兴趣爱好": [0.15, 0.9, 0.5],
+            "其他": [0.05, 0.6, 0.3],
+            "医疗健康": [0.12, 0.7, 0.5],
+            "娱乐": [0.20, 1.1, 0.6],
+            "家居家装": [0.18, 1.3, 0.7],
+            "幽默搞笑": [0.22, 1.0, 0.5],
+            "影视综艺": [0.15, 1.1, 0.6],
+            "情感心理": [0.16, 1.0, 0.6],
+            "才艺技能": [0.17, 1.1, 0.6],
+            "教育培训": [0.13, 0.9, 0.5],
+            "文化": [0.14, 0.9, 0.5],
+            "旅游": [0.19, 1.2, 0.7],
+            "时事资讯": [0.10, 0.7, 0.4],
+            "时尚": [0.23, 1.5, 0.8],
+            "母婴育儿": [0.20, 1.4, 0.7],
+            "汽车": [0.18, 1.3, 0.8],
+            "游戏": [0.25, 1.3, 0.7],
+            "生活": [0.16, 1.0, 0.6],
+            "科学科普": [0.15, 1.1, 0.6],
+            "科技": [0.22, 1.4, 0.9],
+            "美妆": [0.28, 1.6, 0.9],
+            "美容个护": [0.25, 1.5, 0.8],
+            "美食": [0.24, 1.4, 0.7],
+            "职场": [0.17, 1.0, 0.6],
+            "萌宠": [0.21, 1.2, 0.6],
+            "财经": [0.19, 1.3, 0.8],
+            "运动健身": [0.20, 1.2, 0.7],
+            "音乐": [0.18, 1.1, 0.6],
+            "颜值": [0.26, 1.3, 0.8]
+        }
+        
+        # 标签颜色映射（用于可视化）
+        self.label_colors = {
+            "美妆": "#FF69B4", "科技": "#4169E1", "三农": "#228B22",
+            "时尚": "#FF1493", "母婴育儿": "#FFA07A", "其他": "#808080"
+        }
+
+    def get_single_ad_value(self, platform: str, label: str, fans: float) -> float:
+        """估算单条广告报价（单位：万元）"""
+        if label not in self.label_params:
+            raise ValueError(f"无效标签！可选: {list(self.label_params.keys())}")
+        gamma = self.label_params[label][1]
+        base_value = 0.1 * np.sqrt(fans) * gamma  # 基础报价公式
+        return round(base_value, 2)
+
+    def predict_value(
+        self,
+        fans: float,
+        platform: str,
+        label: str,
+        single_ad_value: Optional[float] = None,
+        years: List[int] = [1, 3, 5]
+    ) -> List[Tuple[int, float, int, float]]:
+        """
+        预测商业价值
+        参数:
+            fans: 当前粉丝数（万）
+            platform: 平台名称
+            label: 内容标签
+            single_ad_value: 单条广告报价（万元，可选）
+            years: 预测年份列表
+        返回:
+            [(年份, 粉丝数(万), 年广告条数, 年收益(万元))]
+        """
+        # 参数校验
+        if platform not in self.platform_params:
+            raise ValueError(f"无效平台！可选: {list(self.platform_params.keys())}")
+        if label not in self.label_params:
+            raise ValueError(f"无效标签！可选: {list(self.label_params.keys())}")
+
+        # 获取参数
+        k = self.platform_params[platform]["k"]
+        beta = self.platform_params[platform]["beta"]
+        fan_limit = self.platform_params[platform]["fan_limit"]
+        alpha, gamma, delta = self.label_params[label]
+        
+        # 处理广告报价
+        if single_ad_value is None:
+            single_ad_value = self.get_single_ad_value(platform, label, fans)
+        p0 = single_ad_value * 10000  # 转换为元
+
+        results = []
+        for year in years:
+            # 粉丝增长模型（带上限）
+            ft = min(
+                fans + k * np.log(year + 1) * (1 + alpha),
+                fan_limit
+            )
+            
+            # 广告条数模型
+            nt = int(beta * np.sqrt(ft) * gamma * 12)  # 年化
+            
+            # 广告单价增长
+            pt = p0 * (1 + (ft - fans) / fans * delta)
+            
+            # 总收益（广告+20%其他收入）
+            vt = (nt * pt * 1.2) / 10000  # 转换回万元
+            
+            results.append((year, round(ft, 2), nt, round(vt, 2)))
+        
+        return results
+
+    def visualize_growth(
+        self,
+        fans: float,
+        platform: str,
+        label: str,
+        single_ad_value: Optional[float] = None
+    ):
+        """生成可视化图表"""
+        data = self.predict_value(fans, platform, label, single_ad_value)
+        years = [x[0] for x in data]
+        fan_growth = [x[1] for x in data]
+        income_growth = [x[3] for x in data]
+        
+        color = self.label_colors.get(label, "#1E90FF")
+        
+        plt.figure(figsize=(12, 6))
+        
+        # 粉丝增长曲线
+        plt.subplot(1, 2, 1)
+        plt.plot(years, fan_growth, marker='o', color=color, linewidth=2)
+        plt.title(f"粉丝增长预测\n({platform}·{label})", pad=20)
+        plt.xlabel("年份")
+        plt.ylabel("粉丝数(万)")
+        plt.grid(alpha=0.3)
+        
+        # 收益增长曲线
+        plt.subplot(1, 2, 2)
+        bars = plt.bar(
+            [str(x) for x in years], 
+            income_growth, 
+            color=color,
+            alpha=0.7
+        )
+        plt.title("年收益预测(万元)", pad=20)
+        for bar in bars:
+            height = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2., height,
+                     f'{height:.1f}',
+                     ha='center', va='bottom')
+        
+        plt.suptitle(
+            f"初始粉丝: {fans}万 | 单条广告报价: {single_ad_value or self.get_single_ad_value(platform, label, fans)}万元",
+            y=1.05
+        )
+        plt.tight_layout()
+        plt.show()
+
+# ==================== 使用示例 ====================
+if __name__ == "__main__":
+    predictor = BloggerValuePredictor()
+    
+    # 示例1：自动估算广告报价
+    print("=== 抖音美妆博主案例 ===")
+    print("单条广告估算价值:", predictor.get_single_ad_value("抖音", "美妆", 10), "万元")
+    results = predictor.predict_value(
+        fans=10,
+        platform="抖音",
+        label="美妆"
+    )
+    for year, ft, nt, vt in results:
+        print(f"第{year}年: 粉丝{ft}万, 广告{nt}条, 年收益{vt}万元")
+    predictor.visualize_growth(10, "抖音", "美妆")
+    
+    # 示例2：自定义广告报价
+    print("\n=== 快手三农博主案例 ===")
+    results = predictor.predict_value(
+        fans=50,
+        platform="快手",
+        label="三农",
+        single_ad_value=0.5  # 已知报价0.5万元/条
+    )
+    for year, ft, nt, vt in results:
+        print(f"第{year}年: 粉丝{ft}万, 广告{nt}条, 年收益{vt}万元")
+    predictor.visualize_growth(50, "快手", "三农", 0.5)

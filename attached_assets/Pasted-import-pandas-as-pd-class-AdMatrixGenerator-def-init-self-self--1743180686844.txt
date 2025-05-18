@@ -1,0 +1,86 @@
+import pandas as pd
+
+class AdMatrixGenerator:
+    def __init__(self):
+        # 粉丝量级划分
+        self.fan_ranges = [
+            "1-10万", "10-50万", "50-100万", 
+            "100-500万", "500-1000万", "1000万+"
+        ]
+        
+        # 平台列表
+        self.platforms = ["抖音", "小红书", "B站", "快手"]
+        
+        # 完整32标签列表
+        self.labels = [
+            "三农", "二次元", "健康", "兴趣爱好", "其他",
+            "医疗健康", "娱乐", "家居家装", "幽默搞笑", "影视综艺",
+            "情感心理", "才艺技能", "教育培训", "文化", "旅游",
+            "时事资讯", "时尚", "母婴育儿", "汽车", "游戏",
+            "生活", "科学科普", "科技", "美妆", "美容个护",
+            "美食", "职场", "萌宠", "财经", "运动健身",
+            "音乐", "颜值"
+        ]
+        
+        # 标签基础权重（γ系数扩展版）
+        self.label_weights = {
+            "三农": 1.2, "二次元": 1.4, "健康": 0.8, "兴趣爱好": 0.9,
+            "其他": 0.6, "医疗健康": 0.7, "娱乐": 1.1, "家居家装": 1.3,
+            "幽默搞笑": 1.0, "影视综艺": 1.1, "情感心理": 1.0, "才艺技能": 1.1,
+            "教育培训": 0.9, "文化": 0.9, "旅游": 1.2, "时事资讯": 0.7,
+            "时尚": 1.5, "母婴育儿": 1.4, "汽车": 1.3, "游戏": 1.3,
+            "生活": 1.0, "科学科普": 1.1, "科技": 1.4, "美妆": 1.6,
+            "美容个护": 1.5, "美食": 1.4, "职场": 1.0, "萌宠": 1.2,
+            "财经": 1.3, "运动健身": 1.2, "音乐": 1.1, "颜值": 1.3
+        }
+        
+        # 平台基础条数系数（β系数）
+        self.platform_coef = {
+            "抖音": 1.2, "小红书": 1.0, "B站": 0.8, "快手": 0.6
+        }
+        
+        # 粉丝量级倍数
+        self.range_multiplier = {
+            "1-10万": 1, "10-50万": 2.5, "50-100万": 4.5,
+            "100-500万": 10, "500-1000万": 15, "1000万+": 20
+        }
+
+    def generate_matrix(self) -> pd.DataFrame:
+        """生成完整广告条数矩阵"""
+        data = []
+        
+        for fan_range in self.fan_ranges:
+            for platform in self.platforms:
+                row = {"粉丝量级": fan_range, "平台": platform}
+                
+                # 计算每个标签的广告条数
+                for label in self.labels:
+                    base = 15  # 基础值（1-10万区间抖音美妆的基准）
+                    value = int(
+                        base 
+                        * self.platform_coef[platform] 
+                        * self.label_weights[label] 
+                        * self.range_multiplier[fan_range]
+                    )
+                    row[label] = value
+                
+                data.append(row)
+        
+        return pd.DataFrame(data)
+
+    def save_to_excel(self, filepath: str):
+        """保存为Excel文件"""
+        df = self.generate_matrix()
+        df.to_excel(filepath, index=False)
+        print(f"矩阵已保存至 {filepath}")
+
+# 使用示例
+if __name__ == "__main__":
+    generator = AdMatrixGenerator()
+    df = generator.generate_matrix()
+    
+    # 打印部分数据预览
+    print(df.head(4)[["粉丝量级", "平台", "美妆", "科技", "三农"]])
+    
+    # 保存完整矩阵到Excel
+    generator.save_to_excel("博主广告条数矩阵.xlsx")
